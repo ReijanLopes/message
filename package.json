@@ -1,0 +1,35 @@
+{
+  "name": "mensagens",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev:api": "tsx watch src/api/server.ts",
+    "dev:worker": "tsx watch src/workers/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.1",
+    "@fastify/helmet": "^12.0.1",
+    "@fastify/rate-limit": "^10.1.1",
+    "@supabase/supabase-js": "^2.45.4",
+    "bullmq": "^5.12.12",
+    "fastify": "^4.28.1",
+    "fastify-plugin": "^5.0.1",
+    "ioredis": "^5.4.1",
+    "pino": "^9.4.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.5",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.1"
+  }
+}
