@@ -3,35 +3,102 @@
 SaaS omnichannel: cada empresa cliente (tenant) conecta suas contas de mensageria
 (WhatsApp, e-mail, Instagram, ...) e atende tudo numa única inbox.
 
-> Status: **Bloco 1 — Núcleo** concluído (schema + RLS, connector registry, fila,
-> webhook genérico, worker, API de conversas/mensagens, camada de auth).
-> `MockConnector` e o teste ponta-a-ponta chegam no bloco 2.
+> Status: **Bloco 1 — Núcleo** concluído (schema + RLS, connector registry, fila
+> por canal, webhook genérico, worker, API de conversas/mensagens, camada de
+> auth) e **frontend mínimo da inbox** (`web/`) já conectado à API.
+> `MockConnector` e o teste ponta-a-ponta chegam no bloco 2 — sem um conector
+> registrado a inbox fica vazia (não há como um canal enviar mensagens ainda).
 
 ## Rodando localmente
 
 Pré-requisitos: Node 20+, Docker, [Supabase CLI](https://supabase.com/docs/guides/cli).
 
+### Primeira vez (setup)
+
 ```bash
 npm install
-cp .env.example .env          # preencha os valores abaixo
+cd web && npm install && cp .env.example .env && cd ..
+```
+
+Crie um `.env` na raiz (não versionado) com as variáveis abaixo — preenchidas
+no próximo passo:
+
+```bash
+# Supabase (projeto local via `supabase start`, ou projeto remoto)
+SUPABASE_URL=http://127.0.0.1:54321
+SUPABASE_ANON_KEY=replace-me
+# NUNCA exponha esta chave ao frontend. Usada só pelo worker/jobs de sistema.
+SUPABASE_SERVICE_ROLE_KEY=replace-me
+
+# Redis (BullMQ)
+REDIS_URL=redis://127.0.0.1:6379
+
+# Chave mestra para criptografar credenciais de canais (AES-256-GCM).
+# Gere com: openssl rand -base64 32
+CREDENTIALS_ENCRYPTION_KEY=replace-me-32-bytes-base64
+
+# API
+API_PORT=3000
+API_HOST=0.0.0.0
+# Origens de frontend permitidas (CORS), separadas por vírgula
+CORS_ALLOWED_ORIGINS=http://localhost:5173
+
+NODE_ENV=development
+```
+
+Suba a infra e aplique as migrations:
+
+```bash
 docker compose up -d          # sobe o Redis
 supabase start                # sobe Postgres + Auth + Storage local
 supabase db reset             # aplica as migrations em supabase/migrations
 ```
 
-`supabase start` imprime a `anon key` e a `service_role key` locais — copie para
-`.env`. Gere `CREDENTIALS_ENCRYPTION_KEY` com:
+`supabase start` imprime a `anon key` e a `service_role key` locais — copie
+para `.env` (raiz) e para `web/.env` (`VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY`
+usam a mesma anon key). Gere `CREDENTIALS_ENCRYPTION_KEY` com:
 
 ```bash
 openssl rand -base64 32
 ```
 
-Suba a API e o worker (dois processos):
+Garanta que `CORS_ALLOWED_ORIGINS` no `.env` inclui a origem do frontend
+(`http://localhost:5173`, a porta padrão do Vite) — senão o navegador bloqueia
+as chamadas à API.
+
+### Dia a dia (tudo junto)
+
+```bash
+npm start
+```
+
+Sobe o Redis + Supabase local (`dev:infra`, idempotente — pode rodar de novo
+sem quebrar nada se já estiverem de pé) e, em seguida, API + worker + frontend
+juntos via [`concurrently`](https://www.npmjs.com/package/concurrently), com
+saída colorida e prefixada por processo (`api`, `worker`, `web`). `Ctrl+C`
+encerra os três.
+
+Se a infra (Redis/Supabase) já estiver rodando, pule direto para
+`npm run dev` — só sobe API + worker + frontend.
+
+Para rodar cada peça isoladamente (debug, logs mais limpos):
 
 ```bash
 npm run dev:api      # http://localhost:3000/health
 npm run dev:worker
+npm run dev:web       # http://localhost:5173
 ```
+
+O login do frontend é feito via Supabase Auth (e-mail/senha); para um
+usuário conseguir ver conversas ele precisa ter uma
+linha em `public.profiles` ligando-o a um `tenant_id` — esse fluxo de
+onboarding/convite ainda não tem UI (é feito manualmente via `service_role`
+ou SQL direto no MVP). Sem profile, a API responde 403 e a inbox mostra um
+aviso em vez de travar.
+
+A lista de conversas e a thread aberta são atualizadas por **polling**
+simples (5s e 3s respectivamente) — não há websocket/Supabase Realtime neste
+MVP.
 
 ## Testes
 
@@ -109,4 +176,9 @@ src/
   queue/       # setup BullMQ
 supabase/
   migrations/  # schema + RLS versionados
+web/
+  src/
+    lib/           # client Supabase (auth) + wrapper fetch da API
+    components/     # Login, ConversationList, ConversationThread, ChannelBadge
+    App.tsx          # layout, polling, orquestração
 ```
