@@ -9,6 +9,10 @@
   "scripts": {
     "dev:api": "tsx watch src/api/server.ts",
     "dev:worker": "tsx watch src/workers/index.ts",
+    "dev:web": "npm run dev --prefix web",
+    "dev:infra": "docker compose up -d && supabase start",
+    "dev": "concurrently -n api,worker,web -c blue,green,magenta \"npm run dev:api\" \"npm run dev:worker\" \"npm run dev:web\"",
+    "start": "npm run dev:infra && npm run dev",
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -28,6 +32,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.5.5",
+    "concurrently": "^10.0.4",
     "tsx": "^4.19.1",
     "typescript": "^5.6.2",
     "vitest": "^2.1.1"
